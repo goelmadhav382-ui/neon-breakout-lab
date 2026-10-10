@@ -1,0 +1,190 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEON BREAKOUT LAB</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#050812;color:#e9fbff;font:16px system-ui,sans-serif}
+main{max-width:800px;margin:auto;padding:18px}
+h1{color:#54f7ff;letter-spacing:3px;font-size:clamp(22px,5vw,36px)}
+p{color:#9cb8ca}
+.panel{border:1px solid #19475c;border-radius:14px;padding:14px;background:#091321}
+.stats{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;color:#6ffaff}
+canvas{display:block;width:100%;background:#050b18;border:1px solid #17455b;border-radius:10px;touch-action:pan-y}
+button,input{font:inherit;border-radius:8px;padding:11px;border:1px solid #286178;background:#102335;color:#eaffff}
+button{cursor:pointer}
+button:active{background:#14506a}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+#terminal{display:none;margin-top:12px}
+#log{white-space:pre-wrap;min-height:55px;color:#75ffad;font:14px monospace}
+form{display:flex;gap:8px}
+input{min-width:0;flex:1}
+small{color:#8ca7b8}
+</style>
+</head>
+<body>
+<main>
+<h1>NEON BREAKOUT LAB</h1>
+<p>ARCADE SIMULATION // BUILD 001</p>
+
+<section class="panel">
+<div class="stats">
+<span>SCORE: <b id="score">0</b></span>
+<span>LIVES: <b id="lives">3</b></span>
+<span>BEST: <b id="best">0</b></span>
+</div>
+<div style="margin:12px 0">
+<canvas id="game" width="640" height="440"></canvas>
+</div>
+<div class="controls">
+<button id="start">▶ START / RESUME</button>
+<button id="reset">↻ NEW GAME</button>
+<button id="termBtn">⌘ TERMINAL</button>
+</div>
+<small>Drag your finger across the game to move the paddle. Keep the ball alive and break every block.</small>
+</section>
+
+<section id="terminal" class="panel">
+<strong style="color:#75ffad">ROOT TERMINAL // SIMULATED</strong>
+<div id="log">Type help to see available commands.</div>
+<form id="cmdForm">
+<input id="cmd" placeholder="Enter command..." autocomplete="off">
+<button>RUN</button>
+</form>
+</section>
+<p>STATUS: <span id="status">SYSTEM READY</span></p>
+</main>
+
+<script>
+const c=document.getElementById("game"),x=c.getContext("2d");
+const $=id=>document.getElementById(id);
+let score=0,lives=3,running=false,ballOnPaddle=true;
+let best=Number(localStorage.getItem("neonBest")||0);
+let paddle={x:260,y:408,w:120,h:10};
+let ball={x:320,y:390,r:7,dx:3,dy:-4};
+let bricks=[];
+function makeBricks(){
+ bricks=[];
+ for(let row=0;row<5;row++)
+  for(let col=0;col<8;col++)
+   bricks.push({x:22+col*75,y:45+row*27,w:62,h:15,alive:true,hue:175+row*22});
+}
+function ui(){
+ $("score").textContent=score;
+ $("lives").textContent=lives;
+ $("best").textContent=best;
+}
+function reset(){
+ score=0;lives=3;running=false;ballOnPaddle=true;
+ paddle.x=(c.width-paddle.w)/2;
+ ball.x=c.width/2;ball.y=390;ball.dx=3;ball.dy=-4;
+ makeBricks();ui();
+ $("status").textContent="READY TO LAUNCH";
+ draw();
+}
+function draw(){
+ x.clearRect(0,0,c.width,c.height);
+ x.strokeStyle="#102c40";x.lineWidth=1;
+ for(let i=0;i<c.width;i+=32){
+  x.beginPath();x.moveTo(i,0);x.lineTo(i,c.height);x.stroke();
+ }
+ for(let b of bricks){
+  if(!b.alive)continue;
+  x.shadowBlur=10;x.shadowColor=`hsl(${b.hue} 100% 60%)`;
+  x.fillStyle=`hsl(${b.hue} 90% 55%)`;
+  x.fillRect(b.x,b.y,b.w,b.h);
+ }
+ x.shadowBlur=16;x.shadowColor="#35f8ff";
+ x.fillStyle="#8afaff";
+ x.fillRect(paddle.x,paddle.y,paddle.w,paddle.h);
+ x.beginPath();x.arc(ball.x,ball.y,ball.r,0,Math.PI*2);
+ x.fillStyle="#fff";x.fill();
+ x.shadowBlur=0;
+ if(!running){
+  x.fillStyle="rgba(2,8,18,.72)";
+  x.fillRect(0,185,c.width,65);
+  x.textAlign="center";x.fillStyle="#78ffff";
+  x.font="bold 22px system-ui";
+  x.fillText(ballOnPaddle?"TAP START TO PLAY":"GAME OVER",c.width/2,214);
+  x.font="14px system-ui";x.fillStyle="#d4eaff";
+  x.fillText("Touch controls enabled",c.width/2,237);
+ }
+}
+function launch(){
+ if(lives<=0||bricks.every(b=>!b.alive))reset();
+ running=true;ballOnPaddle=false;
+ $("status").textContent="GAME RUNNING";
+}
+function tick(){
+ if(running){
+  if(ballOnPaddle){
+   ball.x=paddle.x+paddle.w/2;ball.y=paddle.y-ball.r-1;
+  }else{
+   ball.x+=ball.dx;ball.y+=ball.dy;
+   if(ball.x<ball.r||ball.x>c.width-ball.r)ball.dx*=-1;
+   if(ball.y<ball.r)ball.dy=Math.abs(ball.dy);
+   if(ball.dy>0&&ball.y+ball.r>=paddle.y&&
+      ball.x>=paddle.x&&ball.x<=paddle.x+paddle.w){
+    let hit=(ball.x-(paddle.x+paddle.w/2))/(paddle.w/2);
+    ball.dy=-Math.abs(ball.dy);
+    ball.dx=hit*5;
+   }
+   for(let b of bricks){
+    if(b.alive&&ball.x>b.x&&ball.x<b.x+b.w&&
+       ball.y-ball.r<b.y+b.h&&ball.y+ball.r>b.y){
+     b.alive=false;ball.dy*=-1;score+=10;ui();break;
+    }
+   }
+   if(ball.y>c.height){
+    lives--;ui();
+    if(lives<=0){
+     running=false;$("status").textContent="GAME OVER";
+    }else ballOnPaddle=true;
+   }
+   if(bricks.every(b=>!b.alive)){
+    running=false;$("status").textContent="LEVEL CLEARED!";
+    score+=100;ui();
+   }
+  }
+  if(score>best){
+   best=score;localStorage.setItem("neonBest",best);ui();
+  }
+ }
+ draw();requestAnimationFrame(tick);
+}
+function move(e){
+ const r=c.getBoundingClientRect();
+ const px=(e.clientX-r.left)*c.width/r.width;
+ paddle.x=Math.max(0,Math.min(c.width-paddle.w,px-paddle.w/2));
+ if(ballOnPaddle){ball.x=paddle.x+paddle.w/2;ball.y=paddle.y-ball.r-1}
+}
+c.addEventListener("pointermove",move);
+c.addEventListener("pointerdown",e=>{move(e);if(!running)launch()});
+$("start").onclick=launch;
+$("reset").onclick=reset;
+$("termBtn").onclick=()=>{
+ const t=$("terminal");
+ t.style.display=t.style.display==="block"?"none":"block";
+};
+$("cmdForm").addEventListener("submit",e=>{
+ e.preventDefault();
+ const cmd=$("cmd").value.trim().toLowerCase();
+ let out={
+  help:"Commands: help, stats, unlock, clear, launch",
+  stats:`Score: ${score}\nLives: ${lives}\nBest: ${best}\nBlocks remaining: ${bricks.filter(b=>b.alive).length}`,
+  unlock:"SECRET FOUND: Neon Operator\nAchievement recorded for this session.",
+  clear:"Terminal refreshed.",
+  launch:"Arcade launch requested."
+ }[cmd]||"Unknown command. Type help.";
+ if(cmd==="launch")launch();
+ if(cmd==="clear")out="Terminal refreshed.";
+ $("log").textContent=out;
+ $("cmd").value="";
+});
+makeBricks();ui();draw();tick();
+</script>
+</body>
+</html>
